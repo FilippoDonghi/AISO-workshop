@@ -43,7 +43,7 @@ client = None
 if api_key:
     client = genai.Client(api_key=api_key)
 else:
-    print("Warning: GEMINI_API_KEY not set. LLM judge will not be available.")
+    print("Warning: GOOGLE_API_KEY not set. LLM judge will not be available.")
 
 
 DATASET_PATH = "benchmark/questions.json"
@@ -58,9 +58,7 @@ def print_banner():
     orange = "\033[38;5;208m"
     print(f"\n{orange}{Style.BRIGHT}{banner}{Style.RESET_ALL}")
     print(f"{orange}{'=' * width}{Style.RESET_ALL}")
-    print(
-        f"{orange}{Style.BRIGHT}AISO Workshop - Agent Evaluation System{Style.RESET_ALL}"
-    )
+    print(f"{orange}{Style.BRIGHT}AISO Workshop - Agent Evaluation System{Style.RESET_ALL}")
     print(f"{orange}{'=' * width}{Style.RESET_ALL}\n")
 
 
@@ -69,16 +67,16 @@ def _load_dataset():
     dataset_path = DATASET_PATH
 
     try:
-        with open(dataset_path, "r") as f:
+        with open(dataset_path) as f:
             data = json.load(f)
             # Handle both array format and dict with "dataset" key
             if isinstance(data, dict) and "dataset" in data:
                 return data["dataset"]
             return data
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON in dataset file: {e}")
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"Dataset file not found: {dataset_path}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in dataset file: {exc}") from exc
 
 
 def string_match(response: str, expected_answer: str) -> bool:
@@ -86,11 +84,7 @@ def string_match(response: str, expected_answer: str) -> bool:
     Check if response matches expected answer using string comparison.
     Handles both exact matches and partial matches.
     """
-    # Exact match
-    if response.strip().lower() == expected_answer.strip().lower():
-        return True
-
-    return False
+    return response.strip().lower() == expected_answer.strip().lower()
 
 
 def llm_judge(response: str, expected_answer: str, question: str) -> bool:
@@ -132,9 +126,9 @@ Be strict but fair - minor variations in wording are acceptable if the core answ
         if isinstance(parsed, dict) and "is_correct" in parsed:
             return bool(parsed["is_correct"])
         raise ValueError(f"Unexpected LLM judge payload: {type(parsed).__name__}")
-    except Exception as e:
-        print(f"Error in LLM judge: {e}")
-        raise e
+    except Exception as exc:
+        print(f"Error in LLM judge: {exc}")
+        raise
 
 
 def evaluate_single_question(question_data: dict, question_idx: int) -> dict:
@@ -286,16 +280,12 @@ def evaluate_all(dataset_path=None, output_file=None) -> dict:
 
     # Calculate timing statistics
     response_times = [r["response_time"] for r in results]
-    avg_response_time = (
-        sum(response_times) / len(response_times) if response_times else 0
-    )
+    avg_response_time = sum(response_times) / len(response_times) if response_times else 0
 
     # Calculate metrics for correct answers only
     correct_response_times = [r["response_time"] for r in results if r["correct"]]
     avg_correct_response_time = (
-        sum(correct_response_times) / len(correct_response_times)
-        if correct_response_times
-        else 0
+        sum(correct_response_times) / len(correct_response_times) if correct_response_times else 0
     )
 
     # Prepare summary
@@ -323,9 +313,7 @@ def evaluate_all(dataset_path=None, output_file=None) -> dict:
     print(f"{Fore.RED}Incorrect:{Style.RESET_ALL} {total_count - correct_count}")
     print(f"{Fore.CYAN}{Style.BRIGHT}Accuracy:{Style.RESET_ALL} {accuracy:.2f}%")
     print(f"\n{Fore.WHITE}{Style.BRIGHT}Timing Metrics:{Style.RESET_ALL}")
-    print(
-        f"{Fore.MAGENTA}Average Response Time (All):{Style.RESET_ALL} {avg_response_time:.2f}s"
-    )
+    print(f"{Fore.MAGENTA}Average Response Time (All):{Style.RESET_ALL} {avg_response_time:.2f}s")
     print(
         f"{Fore.GREEN}Average Response Time (Correct Only):{Style.RESET_ALL} {avg_correct_response_time:.2f}s"
     )
@@ -339,8 +327,8 @@ def evaluate_all(dataset_path=None, output_file=None) -> dict:
         with open(output_file, "w") as f:
             json.dump(summary, f, indent=2)
         print(f"\n{Fore.CYAN}Results saved to:{Style.RESET_ALL} {output_file}")
-    except IOError as e:
-        raise IOError(f"Failed to write results to {output_file}: {e}")
+    except OSError as exc:
+        raise OSError(f"Failed to write results to {output_file}: {exc}") from exc
 
     return summary
 
@@ -350,10 +338,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--question",
         type=int,
-        help=(
-            "Question number to evaluate (1-based). "
-            "If not provided, evaluates all questions."
-        ),
+        help=("Question number to evaluate (1-based). If not provided, evaluates all questions."),
     )
     parser.add_argument(
         "--output",
@@ -370,9 +355,7 @@ if __name__ == "__main__":
         dataset = _load_dataset()
         question_idx = args.question - 1
         if question_idx < 0 or question_idx >= len(dataset):
-            raise ValueError(
-                f"Question number {args.question} out of range (1-{len(dataset)})"
-            )
+            raise ValueError(f"Question number {args.question} out of range (1-{len(dataset)})")
 
         result = evaluate_single_question(dataset[question_idx], question_idx)
         if result["correct"]:
@@ -380,9 +363,7 @@ if __name__ == "__main__":
         else:
             print(f"\n{Fore.RED}{Style.BRIGHT}Result: ✗ Incorrect{Style.RESET_ALL}")
 
-        print(
-            f"{Fore.MAGENTA}Response Time:{Style.RESET_ALL} {result['response_time']:.2f}s"
-        )
+        print(f"{Fore.MAGENTA}Response Time:{Style.RESET_ALL} {result['response_time']:.2f}s")
     else:
         # Evaluate all questions
         evaluate_all(output_file=args.output)
