@@ -1,6 +1,16 @@
 import base64
-import os
+
 from google import genai
+
+from .safety import MAX_IMAGE_BYTES, SafetyError, resolve_attachment
+
+_IMAGE_MIME_TYPES = {
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+MAX_QUESTION_CHARS = 2_000
 
 
 def read_image(file_path: str, question: str) -> str:
@@ -17,14 +27,18 @@ def read_image(file_path: str, question: str) -> str:
         A description or answer based on the image content.
     """
     try:
-        if not os.path.exists(file_path):
-            return f"Error: File not found at '{file_path}'"
+        if not question or not question.strip():
+            return "Error reading image: A question is required."
+        if len(question) > MAX_QUESTION_CHARS:
+            return "Error reading image: The question is too long."
 
-        with open(file_path, "rb") as f:
-            image_data = base64.b64encode(f.read()).decode("utf-8")
-
-        ext = file_path.split(".")[-1].lower()
-        mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}.get(ext, "image/png")
+        attachment = resolve_attachment(
+            file_path,
+            allowed_suffixes=set(_IMAGE_MIME_TYPES),
+            max_bytes=MAX_IMAGE_BYTES,
+        )
+        image_data = base64.b64encode(attachment.read_bytes()).decode("ascii")
+        mime = _IMAGE_MIME_TYPES[attachment.suffix.lower()]
 
         client = genai.Client()
         response = client.models.generate_content(
@@ -33,11 +47,13 @@ def read_image(file_path: str, question: str) -> str:
                 {
                     "parts": [
                         {"inline_data": {"mime_type": mime, "data": image_data}},
-                        {"text": question},
-                    ]
+                        {"text": question.strip()},
+                    ],
                 }
             ],
         )
-        return response.text
-    except Exception as e:
-        return f"Error reading image: {str(e)}"
+        return response.text or "Error reading image: The model returned no text."
+    except (SafetyError, OSError) as exc:
+        return f"Error reading image: {exc!s}"
+    except Exception:
+        return "Error reading image: Image analysis failed."

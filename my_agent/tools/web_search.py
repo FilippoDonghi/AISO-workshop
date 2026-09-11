@@ -13,15 +13,21 @@ def web_search(query: str) -> str:
     Returns:
         A list of search results with titles, URLs, and snippets.
     """
+    normalized_query = query.strip()
+    if not normalized_query:
+        return "Error searching: A query is required."
+    if len(normalized_query) > 500:
+        return "Error searching: The query is too long."
+
     try:
-        results = DDGS().text(query, max_results=5)
+        results = DDGS().text(normalized_query, max_results=5)
         if not results:
             return "No results found."
-        output = ""
-        for r in results:
-            output += f"Title: {r['title']}\n"
-            output += f"URL: {r['href']}\n"
-            output += f"Snippet: {r['body']}\n\n"
-        return output
-    except Exception as e:
-        return f"Error searching: {str(e)}"
+        output: list[str] = []
+        for result in results:
+            output.append(f"Title: {result.get('title', '')}")
+            output.append(f"URL: {result.get('href', '')}")
+            output.append(f"Snippet: {result.get('body', '')}\n")
+        return "\n".join(output)[:10_000]
+    except Exception:
+        return "Error searching: The search provider request failed."

@@ -1,5 +1,8 @@
-import requests
 from bs4 import BeautifulSoup
+
+from .safety import SafetyError, fetch_public_content
+
+MAX_EXTRACTED_TEXT_CHARS = 10_000
 
 
 def fetch_webpage(url: str) -> str:
@@ -16,17 +19,18 @@ def fetch_webpage(url: str) -> str:
         The text content of the webpage (truncated to 10000 characters).
     """
     try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+        content = fetch_public_content(url)
+        soup = BeautifulSoup(content.body, "html.parser", from_encoding=content.encoding)
 
         # Remove script and style elements
         for tag in soup(["script", "style", "nav", "footer", "header"]):
             tag.decompose()
 
         text = soup.get_text(separator="\n", strip=True)
-        if len(text) > 10000:
-            text = text[:10000] + "\n...(truncated)"
+        if len(text) > MAX_EXTRACTED_TEXT_CHARS:
+            text = text[:MAX_EXTRACTED_TEXT_CHARS] + "\n...(truncated)"
         return text
-    except Exception as e:
-        return f"Error fetching webpage: {str(e)}"
+    except (SafetyError, OSError) as exc:
+        return f"Error fetching webpage: {exc!s}"
+    except Exception:
+        return "Error fetching webpage: The remote request failed."
